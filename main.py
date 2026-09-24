@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine, Base
-from app.routers import common, operation, dataset, analytics
+from app.routers import common, operation, dataset, analytics, export_router
+from app.services.snapshot import bootstrap_exports
 
 
 def create_tables():
@@ -16,6 +17,7 @@ def create_tables():
 
 
 create_tables()
+bootstrap_exports()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -66,6 +68,13 @@ app = FastAPI(
 - 标注完成率、复用率
 - 失败原因分析
 - 按审核状态统计（待审/已发布等）
+
+### 数据集快照导出（外部复核）
+- 请求时冻结指定版本的成员、标注与质量摘要，导出期间数据变化不影响快照
+- 相同请求重复执行返回同一快照；数据内容、调用方权限或脱敏策略变化形成新版本
+- 按调用方权限移除设备序列号与自由文本敏感信息
+- 生成内容摘要（canonical SHA-256）、文件SHA-256与成员级来源清单
+- preparing/ready/failed 三态可查；失败不留可下载半成品，重启后保持已完成快照
     """,
     docs_url="/docs",
     redoc_url="/redoc"
@@ -85,6 +94,7 @@ app.include_router(common.router, prefix=api_prefix)
 app.include_router(operation.router, prefix=api_prefix)
 app.include_router(dataset.router, prefix=api_prefix)
 app.include_router(analytics.router, prefix=api_prefix)
+app.include_router(export_router.router, prefix=api_prefix)
 
 
 @app.get("/", tags=["首页"])

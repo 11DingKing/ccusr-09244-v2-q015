@@ -14,8 +14,16 @@ data/*.db-journal
 data/*.mv.db
 data/*.trace.db
 venv/
+.venv/
+.env/
 __pycache__/
 *.pyc
 .mypy_cache/
 vendor/
 .phpunit.result.cache
+# 快照导出产物目录
+exports/
+*.tmp
+# 默认数据库文件
+robot_data.db
+robot_data.db-*

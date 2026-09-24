@@ -224,3 +224,84 @@ class DatasetSubscription(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     dataset = relationship("Dataset", back_populates="subscriptions")
+
+
+class ApiCaller(Base):
+    """快照导出的调用方。permission_level 决定可见字段范围。
+
+    full：数据所有方/合规人员，可见设备序列号与自由文本；
+    restricted：外部复核团队，按脱敏策略移除敏感字段。
+    """
+
+    __tablename__ = "api_callers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    caller_key = Column(String(100), unique=True, nullable=False, index=True)
+    display_name = Column(String(100), nullable=False)
+    permission_level = Column(String(20), nullable=False, default="restricted", index=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class RedactionPolicy(Base):
+    """脱敏策略的发布版本；只有最新 is_current 版本用于新快照。
+
+    策略内容以 JSON 保存（被移除的字段路径/键名/正则），
+    policy_fingerprint 随策略内容变化，进入快照幂等键。
+    """
+
+    __tablename__ = "redaction_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    revision = Column(Integer, nullable=False, unique=True, index=True)
+    name = Column(String(100), nullable=False)
+    config_json = Column(JSON, nullable=False)
+    policy_fingerprint = Column(String(64), nullable=False)
+    is_current = Column(Boolean, default=True, index=True)
+    created_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ExportSnapshot(Base):
+    """数据集快照导出任务及其产物登记。"""
+
+    __tablename__ = "export_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    snapshot_key = Column(String(64), unique=True, nullable=False, index=True)
+
+    dataset_id = Column(Integer, ForeignKey("datasets.id"), nullable=False, index=True)
+    dataset_version_number = Column(Integer, nullable=True)
+    as_of = Column(DateTime(timezone=True), nullable=False)
+
+    caller_id = Column(Integer, ForeignKey("api_callers.id"), nullable=False, index=True)
+    caller_key = Column(String(100), nullable=False)
+    permission_level = Column(String(20), nullable=False)
+    policy_revision = Column(Integer, nullable=True)
+    policy_fingerprint = Column(String(64), nullable=False)
+    data_fingerprint = Column(String(64), nullable=False)
+
+    # preparing / ready / failed
+    status = Column(String(20), nullable=False, default="preparing", index=True)
+    fail_reason = Column(Text, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+
+    # 冻结时刻的成员作业ID有序列表，确保物化与下载使用同一批记录
+    frozen_operation_ids = Column(JSON, nullable=False)
+
+    file_path = Column(String(500), nullable=True)
+    file_name = Column(String(200), nullable=True)
+    file_size = Column(Integer, nullable=True)
+    content_sha256 = Column(String(64), nullable=True)
+    content_digest = Column(String(64), nullable=True)
+
+    item_count = Column(Integer, nullable=False, default=0)
+    annotation_count = Column(Integer, nullable=False, default=0)
+    redacted_field_count = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    prepared_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    caller = relationship("ApiCaller")
