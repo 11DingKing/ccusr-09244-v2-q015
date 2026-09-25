@@ -224,3 +224,57 @@ class DatasetSubscription(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     dataset = relationship("Dataset", back_populates="subscriptions")
+
+
+class SnapshotExport(Base):
+    """服务端合规快照导出：冻结指定版本的成员、标注与质量摘要。
+
+    快照内容在创建事务内一次性冻结（frozen_sources），之后数据集如何变化
+    都不会影响已生成的文件；相同请求指纹（数据集版本 + 调用方权限 + 脱敏
+    策略版本）永远复用同一条快照。
+    """
+
+    __tablename__ = "snapshot_exports"
+
+    STATUS_PREPARING = "preparing"
+    STATUS_COMPLETED = "completed"
+    STATUS_FAILED = "failed"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # 不建立外键约束：合规快照属于留存记录，数据集被删除后仍需可追溯。
+    dataset_id = Column(Integer, nullable=False, index=True)
+    dataset_version_id = Column(Integer, nullable=True, index=True)
+    dataset_version_label = Column(String(20), nullable=True)
+
+    requestor_team = Column(String(100), nullable=False, index=True)
+    requestor_role = Column(String(50), nullable=False)
+    permission_profile = Column(JSON, nullable=False)
+    masking_policy_version = Column(String(50), nullable=False)
+    artifact_schema_version = Column(String(20), nullable=False)
+
+    request_fingerprint = Column(String(64), nullable=False, unique=True, index=True)
+
+    status = Column(String(20), nullable=False, default=STATUS_PREPARING, index=True)
+
+    # 请求事务内冻结的原始成员与标注（datetime 已转 ISO 字符串）。
+    frozen_operation_ids = Column(JSON, nullable=False)
+    frozen_sources = Column(JSON, nullable=False)
+
+    item_count = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    failure_count = Column(Integer, default=0)
+    annotation_complete_rate = Column(Float, default=0.0)
+    average_quality_score = Column(Float, nullable=True)
+    grade_distribution = Column(JSON, nullable=True)
+    redaction_summary = Column(JSON, nullable=True)
+
+    content_sha256 = Column(String(64), nullable=True)
+    artifact_path = Column(String(500), nullable=True)
+    artifact_size = Column(Integer, nullable=True)
+
+    error_message = Column(Text, nullable=True)
+    attempts = Column(Integer, default=0)
+
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)

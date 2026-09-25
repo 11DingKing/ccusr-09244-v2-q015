@@ -1,25 +1,32 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import engine, Base
-from app.routers import common, operation, dataset, analytics
+from app.database import engine, Base, SessionLocal
+from app.routers import common, operation, dataset, analytics, snapshot
+from app.services.snapshot_export import recover_preparing
 
 
 def create_tables():
-    import os
-    db_path = settings.DATABASE_URL.replace("sqlite:///", "")
-    if not os.path.exists(db_path):
-        Base.metadata.create_all(bind=engine)
-    else:
-        Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
 
 
 create_tables()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 进程启动后恢复未完成快照；原子改名保证此前没有可下载半成品。
+    recover_preparing(SessionLocal)
+    yield
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
+    lifespan=lifespan,
     description="""
 # 机器人真机作业数据回流后端服务
 
@@ -66,6 +73,12 @@ app = FastAPI(
 - 标注完成率、复用率
 - 失败原因分析
 - 按审核状态统计（待审/已发布等）
+
+### 合规快照导出
+- 冻结指定版本的成员、标注与质量摘要，供外部团队复核
+- 按调用方权限脱敏设备序列号与自由文本
+- 内容摘要（SHA-256）与来源清单，相同请求幂等返回同一快照
+- 准备/完成/失败状态查询，失败重试，重启后自动恢复
     """,
     docs_url="/docs",
     redoc_url="/redoc"
@@ -85,6 +98,7 @@ app.include_router(common.router, prefix=api_prefix)
 app.include_router(operation.router, prefix=api_prefix)
 app.include_router(dataset.router, prefix=api_prefix)
 app.include_router(analytics.router, prefix=api_prefix)
+app.include_router(snapshot.router, prefix=api_prefix)
 
 
 @app.get("/", tags=["首页"])

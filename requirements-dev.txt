@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest==8.3.4
+# FastAPI 0.109 的 TestClient 使用 httpx 的 app= 参数，需固定在 0.27.x。
+httpx==0.27.2

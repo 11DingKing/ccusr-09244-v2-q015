@@ -19,3 +19,7 @@ __pycache__/
 .mypy_cache/
 vendor/
 .phpunit.result.cache
+
+# 快照导出产物（运行时生成）
+data/snapshot_exports/
+.venv/
